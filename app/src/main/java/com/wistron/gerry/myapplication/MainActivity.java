@@ -1,5 +1,6 @@
 package com.wistron.gerry.myapplication;
 
+import android.Manifest;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -17,9 +18,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.support.annotation.NonNull;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.support.v4.app.ActivityCompat;
+import android.view.View;
 import android.widget.Toast;
 
 
@@ -28,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
@@ -39,18 +44,35 @@ public class MainActivity extends AppCompatActivity {
     private BluetoothDevice mBLEdevice;
     private BluetoothGatt mGatt;
     private BluetoothLeScanner bluetoothLeScanner;
-    final static private UUID mHeartRateServiceUuid = UUID.fromString("00001800-0000-1000-8000-00805f9b34fb");
+    //final static private UUID mHeartRateServiceUuid = UUID.fromString("00001800-0000-1000-8000-00805f9b34fb");
+    //final static private UUID mOx = UUID.fromString("00001822-0000-1000-8000-00805f9b34fb");
     final static private UUID NORDIC_UART_SERVICE = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
     final static private UUID RX_CHARACTERISTIC = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
     final static private UUID TX_CHARACTERISTIC = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
-    final static private UUID mOx = UUID.fromString("00001822-0000-1000-8000-00805f9b34fb");
+
+    void buttonOnClick(View view) {
+
+        BluetoothGattService service = mGatt.getService(NORDIC_UART_SERVICE);
+        BluetoothGattCharacteristic txCharacteristic = service.getCharacteristic(TX_CHARACTERISTIC);
+        initCharacteristicReading(mGatt,txCharacteristic);
+        System.out.println("Button click");
+    }
+
+    private void notice(){
+
+        BluetoothGattService service = mGatt.getService(NORDIC_UART_SERVICE);
+        BluetoothGattCharacteristic txCharacteristic = service.getCharacteristic(TX_CHARACTERISTIC);
+        initCharacteristicReading(mGatt,txCharacteristic);
+        System.out.println("Button click");
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
-            Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show();
             finish();
         }
         // 初始化蓝牙适配器
@@ -73,6 +95,20 @@ public class MainActivity extends AppCompatActivity {
             startActivityForResult(enableBtIntent,REQUEST_ENABLE_BT);
             System.out.println("mBluetoothAdapter is not enable");
             return;
+        }
+        int permission = ActivityCompat.checkSelfPermission(this,
+                Manifest.permission.ACCESS_COARSE_LOCATION);
+        if (permission != PackageManager.PERMISSION_GRANTED) {
+            //還沒獲取權限要做什麼呢
+
+            //和使用者要求權限
+            ActivityCompat.requestPermissions(MainActivity.this,
+                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+                    1);
+        }else{
+            //以獲取權限要做的事情
+            System.out.println("ACCESS_COARSE_LOCATION is enable");
+            //Toast.makeText(this, "已經拿到權限囉!", Toast.LENGTH_SHORT).show();
         }
         ScanFunction(true);
     }
@@ -104,11 +140,22 @@ public class MainActivity extends AppCompatActivity {
     private void ScanFunction(boolean enable){
         if (enable){
             System.out.println("Scan Functon enable");
+
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                 System.out.println("Go LOLLIPOP");
                 bluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
                 bluetoothLeScanner.startScan(scanCallback);
             }
+
+
+            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            Set<BluetoothDevice> devices = adapter.getBondedDevices();
+            for(int i=0; i<devices.size(); i++)
+            {
+                BluetoothDevice device = (BluetoothDevice) devices.iterator().next();
+                System.out.println(device.getName());
+            }
+
         }
     }
 
@@ -181,12 +228,14 @@ public class MainActivity extends AppCompatActivity {
         //addBusyAction(gatt, GattBusyAction.WRITE_CHARACTERISTIC, characteristic);
         System.out.println("Writedata");
         gatt.writeCharacteristic(characteristic);
+        //notice();
     }
 
     private void initCharacteristicReading(@NonNull BluetoothGatt gatt, @NonNull BluetoothGattCharacteristic characteristic) {
         final int charaProp = characteristic.getProperties();
         System.out.println("txCharacteristic = "+ charaProp);
         enableNotifications(characteristic);
+
         if ((charaProp & characteristic.PROPERTY_READ) > 0) {
             //addBusyAction(gatt, GattBusyAction.READ_CHARACTERISTIC, characteristic);
             System.out.println("readCharacteristic");
@@ -251,6 +300,7 @@ public class MainActivity extends AppCompatActivity {
                 initCharacteristicWriting(gatt,rxCharacteristic);
 
             }
+
             BluetoothGattCharacteristic txCharacteristic = service.getCharacteristic(TX_CHARACTERISTIC);
             if (txCharacteristic != null) {
                 //initCharacteristicWriting(gatt, rxCharacteristic);
@@ -259,6 +309,7 @@ public class MainActivity extends AppCompatActivity {
                 initCharacteristicReading(gatt,txCharacteristic);
 
             }
+
 
         }
     }
@@ -273,9 +324,7 @@ public class MainActivity extends AppCompatActivity {
             //System.out.println("BluetoothGatt中中中"+ newState);
             if (BluetoothGatt.STATE_CONNECTED == newState) {
                 System.out.println("on Connect");
-                gatt.discoverServices();//必须有，可以让onServicesDiscovered显示所有Services
-                //tx_display.append("连接成功");
-                //Toast.makeText(mContext, "连接成功", Toast.LENGTH_SHORT).show();
+                gatt.discoverServices();
             }else if (BluetoothGatt.STATE_DISCONNECTED == newState){
                 //System.out.println("断开 中中中");
                 //Toast.makeText(mContext, "断开连接", Toast.LENGTH_SHORT).show();
@@ -329,7 +378,8 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
             System.out.println("Result");
-            byte[] scanData= new byte[0];
+
+            byte[] scanData = new byte[0];
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                 scanData = result.getScanRecord().getBytes();
                 System.out.println("ResultscanData" + scanData.toString());
@@ -342,6 +392,7 @@ public class MainActivity extends AppCompatActivity {
                 //mBluetoothAdapter.notifyDataSetChanged();
 
             }
+
             //把byte数组转成16进制字符串，方便查看
             //Log.e("TAG","onScanResult :"+CYUtils.Bytes2HexString(scanData));
         }
